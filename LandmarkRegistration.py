@@ -957,27 +957,41 @@ class LandmarkRegistrationLogic:
     fixedPoint = [-fixedPoint[0], -fixedPoint[1], fixedPoint[2]]
     movingPoint = [-movingPoint[0], -movingPoint[1], movingPoint[2]]
 
+    # NOTE: SimpleITK index always starts at 0
+
     fixedRadius = 30
+    fixedROISize = [0,]*3
     fixedROIIndex = [0,]*3
-    fixedROISize = [fixedRadius*2+1,]*3
-
-    # TODO check the regions are in the image!!
-
-    fixedROIIndex = fixedImage.TransformPhysicalPointToIndex(fixedPoint)
-    fixedROIIndex = [ idx-fixedRadius for idx in fixedROIIndex]
+    fixedROIIndex = list(fixedImage.TransformPhysicalPointToIndex(fixedPoint))
+    for i in range(3):
+      if fixedROIIndex[i] < 0 or fixedROIIndex[i] > fixedImage.GetSize()[i]-1:
+        import sys
+        sys.stderr.write("Fixed landmark {0} in not with in fixed image!\n".format(landmarkName))
+        return
+      radius = min(fixedRadius, fixedROIIndex[i], fixedImage.GetSize()[i]-fixedROIIndex[i]-1)
+      fixedROISize[i] = radius*2+1
+      fixedROIIndex[i] -= radius
     print "ROI: ",fixedROIIndex, fixedROISize
+
     croppedFixedImage = sitk.RegionOfInterest( fixedImage, fixedROISize, fixedROIIndex)
     croppedFixedImage = sitk.Cast(croppedFixedImage, sitk.sitkFloat32)
 
     movingRadius = 30
+    movingROISize = [0,]*3
     movingROIIndex = [0,]*3
-    movingROISize = [movingRadius*2+1,]*3
-    movingROIIndex = movingImage.TransformPhysicalPointToIndex(movingPoint)
-    movingROIIndex = [ idx-movingRadius for idx in movingROIIndex]
+    movingROIIndex = list(movingImage.TransformPhysicalPointToIndex(movingPoint))
+    for i in range(3):
+      if movingROIIndex[i] < 0 or movingROIIndex[i] > movingImage.GetSize()[i]-1:
+        import sys
+        sys.stderr.write("Moving landmark {0} in not with in moving image!\n".format(landmarkName))
+        return
+      radius = min(movingRadius, movingROIIndex[i], movingImage.GetSize()[i]-movingROIIndex[i]-1)
+      movingROISize[i] = radius*2+1
+      movingROIIndex[i] -= radius
     print "ROI: ",movingROIIndex, movingROISize
+
     croppedMovingImage = sitk.RegionOfInterest( movingImage, movingROISize, movingROIIndex)
     croppedMovingImage = sitk.Cast(croppedMovingImage, sitk.sitkFloat32)
-
 
     tx = sitk.CenteredTransformInitializer(croppedFixedImage, croppedMovingImage, sitk.VersorRigid3DTransform(), sitk.CenteredTransformInitializerFilter.GEOMETRY)
 
