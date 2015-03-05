@@ -3,6 +3,7 @@ import unittest
 import time
 import SimpleITK as sitk
 import sitkUtils
+from contextlib import contextmanager
 from __main__ import vtk, qt, ctk, slicer
 
 import RegistrationLib
@@ -470,24 +471,32 @@ class LandmarkRegistrationWidget:
           displayNode.RemoveAllViewNodeIDs()
           displayNode.AddViewNodeID("__invalid_view_id__")
 
+  @contextmanager
+  def slicer_batch_mode(self):
+    slicer.mrmlScene.StartState(slicer.mrmlScene.BatchProcessState)
+    try:
+      yield
+    finally:
+      slicer.mrmlScene.EndState(slicer.mrmlScene.BatchProcessState)
+
   def onRefineClicked(self):
     """Refine the selected landmark"""
     timing = True
-    slicer.mrmlScene.StartState(slicer.mrmlScene.BatchProcessState)
+    with self.slicer_batch_mode():
+      fixedVolume = self.volumeSelectors["Fixed"].currentNode()
+      movingVolume = self.volumeSelectors["Moving"].currentNode()
 
-    fixedVolume = self.volumeSelectors["Fixed"].currentNode()
-    movingVolume = self.volumeSelectors["Moving"].currentNode()
+      volumesList = (fixedVolume,movingVolume)
 
-    volumesList = (fixedVolume,movingVolume)
+      if self.landmarksWidget.selectedLandmark != None :
+        landmarkName = self.landmarksWidget.selectedLandmark
 
-    if self.landmarksWidget.selectedLandmark != None :
-      self.logic.refineLandmark(self.landmarksWidget.selectedLandmark, volumesList)
-      if timing: onLandmarkPickedStart = time.time()
-      self.onLandmarkPicked(self.landmarksWidget.selectedLandmark)
-      if timing: onLandmarkPickedEnd = time.time()
-      if timing: print 'Time to update visualization ' + str(onLandmarkPickedEnd - onLandmarkPickedStart) + ' seconds'
-
-    slicer.mrmlScene.EndState(slicer.mrmlScene.BatchProcessState)
+        self.logic.refineLandmark(landmarkName, volumesList, timing=timing, verbose=True)
+        if timing: onLandmarkPickedStart = time.time()
+        self.onLandmarkPicked(self.landmarksWidget.selectedLandmark)
+        if timing:
+          onLandmarkPickedEnd = time.time()
+          print 'Time to update visualization ' + str(onLandmarkPickedEnd - onLandmarkPickedStart) + ' seconds'
 
   def onLandmarkPicked(self,landmarkName):
     """Jump all slice views such that the selected landmark
@@ -912,14 +921,12 @@ class LandmarkRegistrationLogic:
           points[volumeNode].InsertNextPoint(point)
     return points
 
-  def refineLandmark(self, landmarkName, volumes):
+  def refineLandmark(self, landmarkName, volumes, timing=False, verbose=False):
     """Refine the specified landmark"""
     # Refine landmark, or if none, do nothing
     #     Crop images around the fiducial
     #     Affine registration of the cropped images
     #     Transform the fiducial using the transformation
-    timing = True
-    verbose = True
 
     landmarks = self.landmarksForVolumes(volumes)
 
