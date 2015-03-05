@@ -957,39 +957,41 @@ class LandmarkRegistrationLogic:
     fixedPoint = [-fixedPoint[0], -fixedPoint[1], fixedPoint[2]]
     movingPoint = [-movingPoint[0], -movingPoint[1], movingPoint[2]]
 
-    radius = 30
+    fixedRadius = 30
     fixedROIIndex = [0,]*3
-    fixedROISize = [radius*2+1,]*3
+    fixedROISize = [fixedRadius*2+1,]*3
 
     # TODO check the regions are in the image!!
 
     fixedROIIndex = fixedImage.TransformPhysicalPointToIndex(fixedPoint)
-    fixedROIIndex = [ idx-radius for idx in fixedROIIndex]
+    fixedROIIndex = [ idx-fixedRadius for idx in fixedROIIndex]
     print "ROI: ",fixedROIIndex, fixedROISize
     croppedFixedImage = sitk.RegionOfInterest( fixedImage, fixedROISize, fixedROIIndex)
     croppedFixedImage = sitk.Cast(croppedFixedImage, sitk.sitkFloat32)
 
+    movingRadius = 30
     movingROIIndex = [0,]*3
-    movingROISize = [radius*2+1,]*3
+    movingROISize = [movingRadius*2+1,]*3
     movingROIIndex = movingImage.TransformPhysicalPointToIndex(movingPoint)
-    movingROIIndex = [ idx-radius for idx in movingROIIndex]
+    movingROIIndex = [ idx-movingRadius for idx in movingROIIndex]
     print "ROI: ",movingROIIndex, movingROISize
     croppedMovingImage = sitk.RegionOfInterest( movingImage, movingROISize, movingROIIndex)
     croppedMovingImage = sitk.Cast(croppedMovingImage, sitk.sitkFloat32)
 
 
-    tx = sitk.CenteredTransformInitializer(croppedFixedImage, croppedMovingImage, sitk.Euler3DTransform(), sitk.CenteredTransformInitializerFilter.GEOMETRY)
+    tx = sitk.CenteredTransformInitializer(croppedFixedImage, croppedMovingImage, sitk.VersorRigid3DTransform(), sitk.CenteredTransformInitializerFilter.GEOMETRY)
 
     R = sitk.ImageRegistrationMethod()
     R.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
-    R.SetMetricSamplingPercentagePerLevel([0.1,0.2])
-    R.SetOptimizerAsGradientDescent(learningRate=1,
-                                    numberOfIterations=25,
-                                    convergenceMinimumValue=1e-5,
-                                    convergenceWindowSize=5)
-    R.SetOptimizerScalesFromIndexShift()
-    R.SetShrinkFactorsPerLevel([2,1])
-    R.SetSmoothingSigmasPerLevel([3,1])
+    R.SetMetricSamplingPercentage(0.2)
+    R.SetMetricSamplingStrategy(sitk.ImageRegistrationMethod.RANDOM)
+    R.SetOptimizerAsRegularStepGradientDescent(learningRate=1,
+                                               minStep=0.1,
+                                               relaxationFactor=0.5,
+                                               numberOfIterations=250)
+    R.SetOptimizerScalesFromJacobian() # Use this for versor based transforms
+    R.SetShrinkFactorsPerLevel([1])
+    R.SetSmoothingSigmasPerLevel([1])
     R.SetInitialTransform(tx)
     R.SetInterpolator(sitk.sitkLinear)
     #R.SetNumberOfThreads(1)
